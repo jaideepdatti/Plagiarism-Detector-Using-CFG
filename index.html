@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plagiarism Detector Using CFG</title>
+  <meta name="description"
+    content="Context-Free Grammar based code plagiarism detector with AST analysis, DFA validation, and tree edit distance comparison. Built with elegance.">
+  <link rel="stylesheet" href="cfg_plagiarism_detector.css">
+</head>
+
+<body class="letter-colors">
+  <div class="container">
+
+    <!-- HEADER -->
+    <header>
+      <div class="logo-area">
+        <div class="logo-label">Theory of Computation · CFG Analysis v2</div>
+        <h1>Plagiarism Detector</h1>
+        <div class="subtitle">Context-Free Grammar · Recursive Descent · Tree Edit Distance · DFA Validation ·
+          Multi-Code</div>
+      </div>
+      <div class="badge-row">
+        <div class="badge active">CFG Parser</div>
+        <div class="badge">LL(1)</div>
+        <div class="badge active">Zhang-Shasha</div>
+        <div class="badge">PDA</div>
+        <div class="badge v2">DFA Tokens</div>
+        <div class="badge v2">Multi-Code</div>
+        <div class="badge v2">History</div>
+      </div>
+    </header>
+
+    <!-- THEORY STRIP -->
+    <div class="theory-strip">
+      <div class="theory-item"><span class="label">Chomsky Type</span><span class="val">Type-2 (Context-Free)</span>
+      </div>
+      <div class="theory-item"><span class="label">Automaton</span><span class="val">Pushdown Automaton (PDA)</span>
+      </div>
+      <div class="theory-item"><span class="label">Parsing Strategy</span><span class="val">Top-Down Recursive
+          Descent</span></div>
+      <div class="theory-item"><span class="label">Similarity Metric</span><span class="val">Tree Edit Distance
+          (LCS)</span></div>
+      <div class="theory-item"><span class="label">Normalization</span><span class="val">ID abstraction + whitespace
+          strip</span></div>
+      <div class="theory-item"><span class="label">Token Validation</span><span class="val">DFA (5-state machine)</span>
+      </div>
+      <div class="theory-item"><span class="label">Detection Modes</span><span class="val">Exact · Renamed ·
+          Structural</span></div>
+    </div>
+
+    <!-- DFA BANNER -->
+    <div class="dfa-banner">
+      <label class="dfa-toggle">
+        <input type="checkbox" id="dfaToggle" checked>
+        <span style="color:var(--accent4);font-weight:700;">DFA Token Validation</span>
+      </label>
+      <span class="dfa-status" id="dfaStatus">Enabled — tokens validated before parsing</span>
+      <span style="margin-left:auto;color:var(--text-dim);">States: q0(start) → q1(ID) → q2(OP) → q3(NUM) → q4(KW) —
+        accepts on valid token sequence</span>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="history-section" id="historySection">
+      <div class="history-header">
+        <span>⏱ Comparison History</span>
+        <button class="btn-icon" onclick="clearHistory()" title="Clear history"
+          style="width:auto;padding:3px 10px;">Clear</button>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <!-- LOADING / ERROR -->
+    <div class="loading-bar" id="loadingBar">
+      <div class="loading-bar-fill" id="loadingFill"></div>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- MULTI-TOOLBAR -->
+    <div class="multi-toolbar">
+      <span class="section-label">Code Inputs</span>
+      <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="addPanel()">+ Add Code</button>
+      <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('high')">Demo:
+        High</button>
+      <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('low')">Demo:
+        Low</button>
+      <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('multi')">Demo: Multi
+        (3)</button>
+      <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="clearAll()">Clear All</button>
+    </div>
+
+    <!-- EDITORS -->
+    <div class="editors-container">
+      <div class="editors-scroll" id="editorsScroll">
+        <!-- Panels injected by JS -->
+        <button class="add-panel-btn" id="addPanelBtn" onclick="addPanel()">
+          <span class="plus">＋</span>
+          <span>Add Code</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MULTI-CODE COUNT PROMPT -->
+    <div class="count-prompt" id="countPrompt">
+      <span class="label">⚠ Multiple codes detected. Select comparison scope:</span>
+      <select id="compareScope">
+        <option value="all">All pairwise comparisons</option>
+        <option value="first">Compare all against Code A</option>
+      </select>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls-bar">
+      <button class="btn-primary" onclick="runAnalysis()">⟩ Analyze Similarity</button>
+      <select class="select-lang" id="langSelect">
+        <option value="simple">Grammar: SimpleScript</option>
+      </select>
+      <div class="tooltip-wrap">
+        <button class="btn-secondary" onclick="window.open('concepts.html', '_blank')"
+          style="border-color:var(--accent);color:var(--accent-dark);">Concepts Used</button>
+        <span class="tooltip">View Underlying Theory</span>
+      </div>
+      <div class="tooltip-wrap">
+        <button class="btn-secondary" onclick="exportJSON()"
+          style="border-color:var(--accent3);color:var(--accent3);">Export JSON</button>
+        <span class="tooltip">Export results as JSON</span>
+      </div>
+      <div class="tooltip-wrap">
+        <button class="btn-secondary" onclick="exportPDF()"
+          style="border-color:var(--accent2);color:var(--accent2);">Export PDF</button>
+        <span class="tooltip">Print/Save as PDF</span>
+      </div>
+    </div>
+
+    <!-- SIMILARITY MATRIX (multi-code) -->
+    <div class="matrix-section" id="matrixSection">
+      <div class="matrix-header">Pairwise Similarity Matrix</div>
+      <div id="matrixTable"></div>
+      <div class="matrix-pair-detail" id="matrixPairDetail"></div>
+    </div>
+
+    <!-- SCORE (2-code) -->
+    <div class="score-section" id="scoreSection">
+      <div class="score-card" id="scoreCard">
+        <div class="score-dial">
+          <svg viewBox="0 0 100 100">
+            <circle class="track" cx="50" cy="50" r="40" />
+            <circle class="fill" id="dialFill" cx="50" cy="50" r="40" stroke-dasharray="251.2"
+              stroke-dashoffset="251.2" />
+          </svg>
+          <div class="score-label">
+            <div class="score-pct" id="scorePct">0%</div>
+            <div class="score-sub">similar</div>
+          </div>
+        </div>
+        <div>
+          <div class="score-breakdown">
+            <div class="breakdown-item">
+              <div class="bi-label">Common Nodes</div>
+              <div class="bi-val green" id="statCommon">—</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="bi-label">Edit Distance</div>
+              <div class="bi-val red" id="statEdit">—</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="bi-label">Tree A Size</div>
+              <div class="bi-val cyan" id="statA">—</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="bi-label">Tree B Size</div>
+              <div class="bi-val cyan" id="statB">—</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="bi-label">Tokens A</div>
+              <div class="bi-val cyan" id="statTokA">—</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="bi-label">Tokens B</div>
+              <div class="bi-val cyan" id="statTokB">—</div>
+            </div>
+          </div>
+          <div class="threshold-bar">
+            <span style="color:var(--text-dim);">Plagiarism Threshold Indicator</span>
+            <div class="threshold-track">
+              <div class="threshold-cursor" id="thresholdCursor" style="left:0%"></div>
+            </div>
+            <div class="threshold-labels"><span style="color:var(--accent3);">LOW</span><span
+                style="color:var(--amber);">MEDIUM</span><span style="color:var(--accent2);">HIGH</span></div>
+          </div>
+        </div>
+        <div class="verdict">
+          <div class="verdict-badge" id="verdictBadge">—</div>
+          <div style="margin-top:10px;">
+            <div class="progress-bar-wrap">
+              <div class="progress-label"><span>Similarity</span><span id="progLabel">0%</span></div>
+              <div class="progress-track" style="width:160px;">
+                <div class="progress-fill" id="progFill" style="width:0%;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="formula-text" style="margin-top:12px;" id="formulaText">score = 1 − edit_dist / max(|A|,|B|)</div>
+          <div class="match-explanation" id="matchExplanation" style="display:none;text-align:left;max-width:240px;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS TABS -->
+    <div class="results-panel" id="resultsPanel">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('ast')">AST Diff</div>
+        <div class="tab" onclick="switchTab('tokens')">Token Stream</div>
+        <div class="tab" onclick="switchTab('grammar')">CFG Rules</div>
+        <div class="tab" onclick="switchTab('trace')">Parse Trace</div>
+        <div class="tab" onclick="switchTab('tree')">Parse Tree</div>
+        <div class="tab" onclick="switchTab('dfa')">DFA Validation</div>
+        <div class="tab" onclick="switchTab('ambiguity')">Ambiguity</div>
+      </div>
+      <div class="tab-body">
+        <div class="tab-content active" id="tab-ast">
+          <div class="ast-diff" id="astDiff"></div>
+        </div>
+        <div class="tab-content" id="tab-tokens">
+          <div id="tokenDisplay"></div>
+        </div>
+        <div class="tab-content" id="tab-grammar">
+          <div class="grammar-list" id="grammarDisplay"></div>
+        </div>
+        <div class="tab-content" id="tab-trace">
+          <div class="parse-trace" id="traceDisplay"></div>
+        </div>
+        <div class="tab-content" id="tab-tree">
+          <div class="tree-controls">
+            <button onclick="zoomTree(-0.2)">− Zoom Out</button>
+            <span class="zoom-label" id="zoomLabel">100%</span>
+            <button onclick="zoomTree(0.2)">+ Zoom In</button>
+            <button onclick="resetZoom()">Reset</button>
+            <span style="margin-left:12px;font-family:var(--font-code);font-size:10px;color:var(--text-dim);">Click
+              nodes to highlight. Green = shared. Red = unique.</span>
+          </div>
+          <div id="tree-svg"></div>
+        </div>
+        <div class="tab-content" id="tab-dfa">
+          <div id="dfaDisplay"></div>
+        </div>
+        <div class="tab-content" id="tab-ambiguity">
+          <div id="ambiguityDisplay"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end container -->
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-label">Crafted with precision</div>
+    <div class="footer-name">Made by Jaideep Datti</div>
+    <div class="footer-links">
+      <a class="footer-link" href="mailto:jaideep.d24@iiits.in" title="Send email">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
+        </svg>
+        jaideep.d24@iiits.in
+      </a>
+      <a class="footer-link" href="https://www.linkedin.com/in/jaideep-datti/" target="_blank" rel="noopener noreferrer"
+        title="LinkedIn Profile">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
+        </svg>
+        LinkedIn
+      </a>
+    </div>
+    <div class="footer-ornament">— ❧ —</div>
+    <div class="footer-year">© 2026 · Theory of Computation</div>
+  </footer>
+
+  <script src="cfg_plagiarism_detector.js"></script>
+</body>
+
+</html>

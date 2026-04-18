@@ -1,0 +1,1773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CFG Plagiarism Detector v2</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0b0f;
+  --surface: #12141a;
+  --surface2: #1a1d26;
+  --surface3: #22263a;
+  --border: #2a2f45;
+  --accent: #00e5ff;
+  --accent2: #ff4081;
+  --accent3: #76ff03;
+  --accent4: #bb86fc;
+  --text: #e8eaf0;
+  --text-dim: #7a8099;
+  --match: #1a3a1a;
+  --match-border: #76ff03;
+  --diff: #3a1a1a;
+  --diff-border: #ff4081;
+  --neutral: #1a1e2e;
+  --neutral-border: #2a3055;
+  --font-code: 'JetBrains Mono', monospace;
+  --font-ui: 'Syne', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container { position: relative; z-index: 1; max-width: 1500px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* HEADER */
+header {
+  padding: 40px 0 32px;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+  position: relative;
+}
+header::after {
+  content: '';
+  position: absolute; bottom: -1px; left: 0;
+  width: 200px; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+.logo-area { display: flex; flex-direction: column; gap: 6px; }
+.logo-label { font-size: 10px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent); font-family: var(--font-code); font-weight: 600; }
+h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; background: linear-gradient(135deg, var(--text) 40%, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.subtitle { font-size: 13px; color: var(--text-dim); font-family: var(--font-code); margin-top: 4px; }
+.badge-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.badge { font-size: 10px; font-family: var(--font-code); letter-spacing: 1px; padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border); color: var(--text-dim); text-transform: uppercase; }
+.badge.active { border-color: var(--accent); color: var(--accent); }
+.badge.v2 { border-color: var(--accent4); color: var(--accent4); }
+
+/* THEORY STRIP */
+.theory-strip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  display: flex; gap: 32px; flex-wrap: wrap;
+  font-family: var(--font-code); font-size: 11px;
+}
+.theory-item { display: flex; flex-direction: column; gap: 3px; }
+.theory-item .label { color: var(--text-dim); }
+.theory-item .val { color: var(--accent3); }
+
+/* DFA VALIDATION BANNER */
+.dfa-banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent4);
+  border-radius: 4px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  display: flex; align-items: center; gap: 16px;
+  font-family: var(--font-code); font-size: 11px;
+}
+.dfa-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.dfa-toggle input[type=checkbox] { accent-color: var(--accent4); width: 14px; height: 14px; cursor: pointer; }
+.dfa-status { color: var(--text-dim); }
+.dfa-status.ok { color: var(--accent3); }
+.dfa-status.fail { color: var(--accent2); }
+
+/* MULTI-INPUT TOOLBAR */
+.multi-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.multi-toolbar .section-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-family: var(--font-code); }
+
+/* EDITOR PANELS CONTAINER */
+.editors-container { margin-bottom: 20px; }
+.editors-scroll { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; }
+.editors-scroll::-webkit-scrollbar { height: 4px; }
+.editors-scroll::-webkit-scrollbar-track { background: var(--surface); }
+.editors-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+.editor-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; overflow: hidden;
+  display: flex; flex-direction: column;
+  min-width: 340px; flex: 1;
+  transition: border-color 0.2s;
+}
+.editor-panel:focus-within { border-color: var(--accent); }
+
+.panel-header {
+  background: var(--surface2);
+  padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+.panel-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+.panel-title .panel-letter { font-size: 13px; font-weight: 800; }
+.panel-actions { display: flex; gap: 6px; align-items: center; }
+.line-count { font-family: var(--font-code); font-size: 10px; color: var(--text-dim); }
+
+.btn-icon {
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  width: 26px; height: 26px; border-radius: 3px; font-size: 11px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; padding: 0;
+}
+.btn-icon:hover { border-color: var(--accent2); color: var(--accent2); }
+.btn-icon.remove:hover { background: rgba(255,64,129,0.1); }
+
+textarea {
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-family: var(--font-code);
+  font-size: 12px; line-height: 1.7;
+  resize: none; padding: 16px;
+  width: 100%; min-height: 220px;
+  tab-size: 2;
+  caret-color: var(--accent);
+}
+textarea::placeholder { color: var(--text-dim); opacity: 0.4; }
+
+/* FILE DROP ZONE */
+.drop-zone {
+  border: 1px dashed var(--border); border-radius: 3px;
+  margin: 0 16px 12px;
+  padding: 8px;
+  text-align: center;
+  font-family: var(--font-code); font-size: 10px; color: var(--text-dim);
+  cursor: pointer; transition: all 0.15s;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.04); }
+.drop-zone input[type=file] { display: none; }
+
+/* ADD PANEL BUTTON */
+.add-panel-btn {
+  min-width: 100px; flex-shrink: 0;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; cursor: pointer; color: var(--text-dim);
+  font-family: var(--font-code); font-size: 11px;
+  transition: all 0.2s; padding: 20px;
+  min-height: 260px;
+}
+.add-panel-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.03); }
+.add-panel-btn .plus { font-size: 28px; line-height: 1; }
+
+/* CONTROLS */
+.controls-bar {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.btn-primary {
+  background: var(--accent); color: #000;
+  border: none; padding: 12px 28px;
+  font-family: var(--font-ui); font-size: 13px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  cursor: pointer; border-radius: 4px;
+  transition: all 0.15s;
+  position: relative; overflow: hidden;
+}
+.btn-primary::after {
+  content: ''; position: absolute;
+  inset: 0; background: rgba(255,255,255,0.2);
+  transform: translateX(-100%); transition: transform 0.2s;
+}
+.btn-primary:hover::after { transform: translateX(0); }
+.btn-primary:hover { box-shadow: 0 0 20px rgba(0,229,255,0.4); }
+
+.btn-secondary {
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 11px 20px; font-family: var(--font-ui);
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+  cursor: pointer; border-radius: 4px; transition: all 0.15s;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-export {
+  background: transparent; color: var(--accent4);
+  border: 1px solid var(--accent4);
+  padding: 11px 20px; font-family: var(--font-ui);
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+  cursor: pointer; border-radius: 4px; transition: all 0.15s;
+  margin-left: auto;
+}
+.btn-export:hover { background: rgba(187,134,252,0.1); }
+
+.select-lang {
+  background: var(--surface2); color: var(--text-dim);
+  border: 1px solid var(--border); padding: 10px 16px;
+  font-family: var(--font-code); font-size: 12px;
+  border-radius: 4px; outline: none; cursor: pointer;
+}
+.select-lang:focus { border-color: var(--accent); }
+
+/* MULTI-CODE COUNT PROMPT */
+.count-prompt {
+  background: var(--surface);
+  border: 1px solid var(--accent4);
+  border-radius: 6px; padding: 16px 20px;
+  display: none; margin-bottom: 20px;
+  animation: fadeIn 0.3s ease;
+  font-family: var(--font-code); font-size: 12px;
+  align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.count-prompt.visible { display: flex; }
+.count-prompt label { color: var(--accent4); }
+.count-prompt select { background: var(--surface2); color: var(--text); border: 1px solid var(--accent4); padding: 6px 12px; border-radius: 3px; font-family: var(--font-code); font-size: 12px; }
+
+/* SCORE PANEL (2-code) */
+.score-section { margin-bottom: 20px; display: none; }
+.score-section.visible { display: block; animation: fadeIn 0.3s ease; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+.score-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; padding: 24px;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
+}
+
+.score-dial { position: relative; width: 100px; height: 100px; }
+.score-dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.score-dial .track { fill: none; stroke: var(--surface3); stroke-width: 8; }
+.score-dial .fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1); }
+.score-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-code); }
+.score-pct { font-size: 22px; font-weight: 700; }
+.score-sub { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+
+.score-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.breakdown-item { background: var(--surface2); border-radius: 4px; padding: 12px 14px; }
+.breakdown-item .bi-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.breakdown-item .bi-val { font-family: var(--font-code); font-size: 16px; font-weight: 600; }
+.breakdown-item .bi-val.green { color: var(--accent3); }
+.breakdown-item .bi-val.red { color: var(--accent2); }
+.breakdown-item .bi-val.cyan { color: var(--accent); }
+.breakdown-item .bi-val.purple { color: var(--accent4); }
+
+.verdict { text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.verdict-badge { padding: 6px 18px; border-radius: 3px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.verdict-badge.high { background: rgba(255,64,129,0.15); border: 1px solid var(--accent2); color: var(--accent2); }
+.verdict-badge.medium { background: rgba(255,193,7,0.1); border: 1px solid #ffc107; color: #ffc107; }
+.verdict-badge.low { background: rgba(118,255,3,0.1); border: 1px solid var(--accent3); color: var(--accent3); }
+.formula-text { font-family: var(--font-code); font-size: 10px; color: var(--text-dim); }
+
+.progress-bar-wrap { margin-top: 12px; }
+.progress-label { font-size: 10px; color: var(--text-dim); font-family: var(--font-code); margin-bottom: 4px; display: flex; justify-content: space-between; }
+.progress-track { background: var(--surface3); border-radius: 99px; height: 5px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 99px; transition: width 0.8s cubic-bezier(.4,0,.2,1); }
+
+/* MATCH EXPLANATION */
+.match-explanation {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px; padding: 12px 16px;
+  margin-top: 12px;
+  font-family: var(--font-code); font-size: 11px; color: var(--text-dim);
+  line-height: 1.8;
+}
+.match-explanation .why-item { display: flex; gap: 8px; margin-bottom: 4px; }
+.match-explanation .why-icon { flex-shrink: 0; }
+.why-exact { color: var(--accent2); }
+.why-renamed { color: #ffc107; }
+.why-structural { color: var(--accent3); }
+
+/* MATRIX TABLE */
+.matrix-section { margin-bottom: 20px; display: none; }
+.matrix-section.visible { display: block; animation: fadeIn 0.3s ease; }
+.matrix-header { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-family: var(--font-code); margin-bottom: 12px; }
+.matrix-table { width: 100%; border-collapse: collapse; font-family: var(--font-code); font-size: 12px; }
+.matrix-table th, .matrix-table td { padding: 10px 14px; border: 1px solid var(--border); text-align: center; }
+.matrix-table th { background: var(--surface2); color: var(--text-dim); font-weight: 600; }
+.matrix-table td { background: var(--surface); cursor: pointer; transition: background 0.15s; }
+.matrix-table td:hover { background: var(--surface3); }
+.matrix-table td.self { background: var(--surface2); color: var(--text-dim); }
+.matrix-table td.high-sim { background: rgba(255,64,129,0.15); color: var(--accent2); font-weight: 700; }
+.matrix-table td.med-sim { background: rgba(255,193,7,0.1); color: #ffc107; font-weight: 600; }
+.matrix-table td.low-sim { background: rgba(118,255,3,0.08); color: var(--accent3); }
+.matrix-pair-detail { margin-top: 16px; padding: 12px 16px; background: var(--surface2); border-radius: 4px; border-left: 3px solid var(--accent); font-family: var(--font-code); font-size: 11px; display: none; }
+.matrix-pair-detail.visible { display: block; animation: slideIn 0.2s ease; }
+
+/* TABS */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0; overflow-x: auto; }
+.tab {
+  padding: 10px 20px; font-size: 11px; font-weight: 600; letter-spacing: 1px;
+  text-transform: uppercase; cursor: pointer; color: var(--text-dim);
+  border-bottom: 2px solid transparent; transition: all 0.15s; margin-bottom: -1px;
+  font-family: var(--font-ui); white-space: nowrap;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:hover:not(.active) { color: var(--text); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.results-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px; overflow: hidden;
+  display: none;
+}
+.results-panel.visible { display: block; animation: fadeIn 0.3s ease; }
+.tab-body { padding: 20px; }
+
+/* AST DIFF */
+.ast-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ast-col {}
+.ast-col-header { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; font-weight: 600; }
+.ast-tree { font-family: var(--font-code); font-size: 11px; line-height: 1.8; max-height: 400px; overflow-y: auto; }
+.ast-node { padding: 2px 8px; border-radius: 3px; margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: opacity 0.15s; }
+.ast-node:hover { opacity: 0.8; }
+.ast-node.match { background: var(--match); border-left: 2px solid var(--match-border); color: #a5d6a7; }
+.ast-node.diff { background: var(--diff); border-left: 2px solid var(--diff-border); color: #ef9a9a; }
+.ast-node.neutral { background: var(--neutral); border-left: 2px solid var(--neutral-border); color: var(--text-dim); }
+.ast-node.highlighted { outline: 1px solid var(--accent); }
+
+/* INTERACTIVE SVG TREE */
+#tree-svg { width: 100%; overflow: auto; min-height: 300px; }
+#tree-svg svg { min-width: 600px; }
+.tree-controls { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+.tree-controls button { padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); border-radius: 3px; cursor: pointer; font-family: var(--font-code); font-size: 11px; transition: all 0.15s; }
+.tree-controls button:hover { border-color: var(--accent); color: var(--accent); }
+.tree-controls .zoom-label { font-family: var(--font-code); font-size: 11px; color: var(--text-dim); }
+.tree-node-clickable { cursor: pointer; transition: opacity 0.2s; }
+.tree-node-clickable:hover { opacity: 0.75; }
+
+/* TOKEN STREAM */
+.token-stream { display: flex; flex-wrap: wrap; gap: 6px; }
+.token { font-family: var(--font-code); font-size: 11px; padding: 3px 8px; border-radius: 3px; border: 1px solid transparent; }
+.token.KW  { background: rgba(0,229,255,0.1); border-color: rgba(0,229,255,0.3); color: var(--accent); }
+.token.ID  { background: rgba(118,255,3,0.08); border-color: rgba(118,255,3,0.2); color: var(--accent3); }
+.token.NUM { background: rgba(255,193,7,0.1); border-color: rgba(255,193,7,0.25); color: #ffc107; }
+.token.OP  { background: rgba(255,64,129,0.08); border-color: rgba(255,64,129,0.2); color: var(--accent2); }
+.token.DELIM { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--text-dim); }
+.token.NORM { background: rgba(187,134,252,0.1); border-color: rgba(187,134,252,0.3); color: #bb86fc; }
+.token-section { margin-bottom: 18px; }
+.token-section-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; font-family: var(--font-code); }
+
+/* DFA VALIDATION DISPLAY */
+.dfa-states { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.dfa-state { font-family: var(--font-code); font-size: 10px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); color: var(--text-dim); }
+.dfa-state.current { border-color: var(--accent4); color: var(--accent4); background: rgba(187,134,252,0.1); }
+.dfa-state.accept { border-color: var(--accent3); color: var(--accent3); background: rgba(118,255,3,0.1); }
+.dfa-state.reject { border-color: var(--accent2); color: var(--accent2); background: rgba(255,64,129,0.1); }
+.dfa-transition-table { width: 100%; border-collapse: collapse; font-family: var(--font-code); font-size: 11px; margin-top: 12px; }
+.dfa-transition-table th, .dfa-transition-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: center; }
+.dfa-transition-table th { background: var(--surface2); color: var(--text-dim); }
+.dfa-transition-table td.active-cell { background: rgba(187,134,252,0.1); color: var(--accent4); }
+
+/* GRAMMAR RULES */
+.grammar-list { display: flex; flex-direction: column; gap: 6px; }
+.grammar-rule {
+  background: var(--surface2); border-radius: 4px;
+  padding: 10px 16px;
+  font-family: var(--font-code); font-size: 12px;
+  border-left: 2px solid var(--border);
+  display: flex; align-items: baseline; gap: 12px;
+  transition: border-color 0.2s;
+}
+.grammar-rule:hover { border-left-color: var(--accent); }
+.grammar-rule .lhs { color: var(--accent); min-width: 90px; }
+.grammar-rule .arrow { color: var(--text-dim); }
+.grammar-rule .rhs { color: var(--text); flex: 1; }
+.grammar-rule .rhs .kw { color: #ffc107; }
+.grammar-rule .rhs .meta { color: var(--accent2); }
+.grammar-ambiguity-note { background: rgba(255,193,7,0.08); border: 1px solid rgba(255,193,7,0.3); border-radius: 4px; padding: 10px 14px; margin-top: 12px; font-family: var(--font-code); font-size: 11px; color: #ffc107; }
+
+/* PARSE TRACE */
+.parse-trace { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
+.trace-step {
+  font-family: var(--font-code); font-size: 11px;
+  padding: 5px 12px; border-radius: 3px;
+  display: flex; gap: 12px; align-items: baseline;
+  background: var(--surface2);
+  animation: slideIn 0.15s ease backwards;
+}
+.trace-step .step-num { color: var(--text-dim); min-width: 28px; }
+.trace-step .step-rule { color: var(--accent3); }
+.trace-step .step-token { color: var(--accent2); }
+.trace-step .step-action { color: var(--text-dim); flex: 1; }
+
+/* HISTORY */
+.history-section { margin-bottom: 24px; display: none; }
+.history-section.has-items { display: block; }
+.history-header { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); font-family: var(--font-code); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: border-color 0.15s;
+  font-family: var(--font-code); font-size: 11px;
+}
+.history-item:hover { border-color: var(--accent); }
+.history-item .h-time { color: var(--text-dim); min-width: 80px; }
+.history-item .h-codes { color: var(--text); flex: 1; }
+.history-item .h-score { font-weight: 700; }
+.history-item .h-score.high { color: var(--accent2); }
+.history-item .h-score.med { color: #ffc107; }
+.history-item .h-score.low { color: var(--accent3); }
+
+/* THRESHOLD INDICATOR */
+.threshold-bar {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+  padding: 10px 14px; margin-top: 10px;
+  font-family: var(--font-code); font-size: 10px;
+}
+.threshold-track { position: relative; height: 8px; background: linear-gradient(90deg, #76ff03 0% 40%, #ffc107 40% 70%, #ff4081 70% 100%); border-radius: 99px; margin: 8px 0; }
+.threshold-cursor { position: absolute; top: -3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; background: var(--bg); transform: translateX(-50%); transition: left 0.8s cubic-bezier(.4,0,.2,1); }
+.threshold-labels { display: flex; justify-content: space-between; color: var(--text-dim); }
+
+/* LOADING */
+.loading-bar { height: 2px; background: var(--surface3); border-radius: 99px; overflow: hidden; margin-bottom: 20px; display: none; }
+.loading-bar.active { display: block; }
+.loading-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width 0.3s; animation: loadPulse 1s ease-in-out infinite; }
+@keyframes loadPulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* ERROR */
+.error-msg { background: rgba(255,64,129,0.1); border: 1px solid rgba(255,64,129,0.3); border-radius: 4px; padding: 10px 16px; font-family: var(--font-code); font-size: 11px; color: var(--accent2); margin-bottom: 16px; display: none; }
+.error-msg.visible { display: block; }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* TOOLTIP */
+.tooltip-wrap { position: relative; display: inline-block; }
+.tooltip-wrap .tooltip {
+  visibility: hidden; opacity: 0;
+  background: var(--surface3); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--font-code); font-size: 10px;
+  padding: 4px 8px; border-radius: 3px;
+  position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; transition: opacity 0.2s; z-index: 100;
+}
+.tooltip-wrap:hover .tooltip { visibility: visible; opacity: 1; }
+
+/* PANEL COLORS */
+.editor-panel[data-idx="0"]:focus-within { border-color: var(--accent); }
+.editor-panel[data-idx="1"]:focus-within { border-color: var(--accent2); }
+.editor-panel[data-idx="2"]:focus-within { border-color: var(--accent3); }
+.editor-panel[data-idx="3"]:focus-within { border-color: var(--accent4); }
+.editor-panel[data-idx="4"]:focus-within { border-color: #ffc107; }
+
+.letter-colors { --c0: var(--accent); --c1: var(--accent2); --c2: var(--accent3); --c3: var(--accent4); --c4: #ffc107; }
+
+@media (max-width: 768px) {
+  .ast-diff { grid-template-columns: 1fr; }
+  .score-card { grid-template-columns: 1fr; }
+  h1 { font-size: 22px; }
+}
+</style>
+</head>
+<body class="letter-colors">
+<div class="container">
+
+<!-- HEADER -->
+<header>
+  <div class="logo-area">
+    <div class="logo-label">Theory of Computation · CFG Analysis v2</div>
+    <h1>Plagiarism Detector</h1>
+    <div class="subtitle">Context-Free Grammar · Recursive Descent · Tree Edit Distance · DFA Validation · Multi-Code</div>
+  </div>
+  <div class="badge-row">
+    <div class="badge active">CFG Parser</div>
+    <div class="badge">LL(1)</div>
+    <div class="badge active">Zhang-Shasha</div>
+    <div class="badge">PDA</div>
+    <div class="badge v2">DFA Tokens</div>
+    <div class="badge v2">Multi-Code</div>
+    <div class="badge v2">History</div>
+  </div>
+</header>
+
+<!-- THEORY STRIP -->
+<div class="theory-strip">
+  <div class="theory-item"><span class="label">Chomsky Type</span><span class="val">Type-2 (Context-Free)</span></div>
+  <div class="theory-item"><span class="label">Automaton</span><span class="val">Pushdown Automaton (PDA)</span></div>
+  <div class="theory-item"><span class="label">Parsing Strategy</span><span class="val">Top-Down Recursive Descent</span></div>
+  <div class="theory-item"><span class="label">Similarity Metric</span><span class="val">Tree Edit Distance (LCS)</span></div>
+  <div class="theory-item"><span class="label">Normalization</span><span class="val">ID abstraction + whitespace strip</span></div>
+  <div class="theory-item"><span class="label">Token Validation</span><span class="val">DFA (5-state machine)</span></div>
+  <div class="theory-item"><span class="label">Detection Modes</span><span class="val">Exact · Renamed · Structural</span></div>
+</div>
+
+<!-- DFA BANNER -->
+<div class="dfa-banner">
+  <label class="dfa-toggle">
+    <input type="checkbox" id="dfaToggle" checked>
+    <span style="color:var(--accent4);font-weight:700;">DFA Token Validation</span>
+  </label>
+  <span class="dfa-status" id="dfaStatus">Enabled — tokens validated before parsing</span>
+  <span style="margin-left:auto;color:var(--text-dim);">States: q0(start) → q1(ID) → q2(OP) → q3(NUM) → q4(KW) — accepts on valid token sequence</span>
+</div>
+
+<!-- HISTORY -->
+<div class="history-section" id="historySection">
+  <div class="history-header">
+    <span>⏱ Comparison History</span>
+    <button class="btn-icon" onclick="clearHistory()" title="Clear history" style="width:auto;padding:3px 10px;">Clear</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<!-- LOADING / ERROR -->
+<div class="loading-bar" id="loadingBar"><div class="loading-bar-fill" id="loadingFill"></div></div>
+<div class="error-msg" id="errorMsg"></div>
+
+<!-- MULTI-TOOLBAR -->
+<div class="multi-toolbar">
+  <span class="section-label">Code Inputs</span>
+  <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="addPanel()">+ Add Code</button>
+  <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('high')">Demo: High</button>
+  <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('low')">Demo: Low</button>
+  <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="loadDemo('multi')">Demo: Multi (3)</button>
+  <button class="btn-secondary" style="padding:7px 14px;font-size:11px;" onclick="clearAll()">Clear All</button>
+</div>
+
+<!-- EDITORS -->
+<div class="editors-container">
+  <div class="editors-scroll" id="editorsScroll">
+    <!-- Panels injected by JS -->
+    <button class="add-panel-btn" id="addPanelBtn" onclick="addPanel()">
+      <span class="plus">＋</span>
+      <span>Add Code</span>
+    </button>
+  </div>
+</div>
+
+<!-- MULTI-CODE COUNT PROMPT -->
+<div class="count-prompt" id="countPrompt">
+  <span class="label">⚠ Multiple codes detected. Select comparison scope:</span>
+  <select id="compareScope">
+    <option value="all">All pairwise comparisons</option>
+    <option value="first">Compare all against Code A</option>
+  </select>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls-bar">
+  <button class="btn-primary" onclick="runAnalysis()">⟩ Analyze Similarity</button>
+  <select class="select-lang" id="langSelect">
+    <option value="simple">Grammar: SimpleScript</option>
+  </select>
+  <div class="tooltip-wrap">
+    <button class="btn-secondary" onclick="exportJSON()" style="border-color:var(--accent3);color:var(--accent3);">Export JSON</button>
+    <span class="tooltip">Export results as JSON</span>
+  </div>
+  <div class="tooltip-wrap">
+    <button class="btn-secondary" onclick="exportPDF()" style="border-color:var(--accent2);color:var(--accent2);">Export PDF</button>
+    <span class="tooltip">Print/Save as PDF</span>
+  </div>
+</div>
+
+<!-- SIMILARITY MATRIX (multi-code) -->
+<div class="matrix-section" id="matrixSection">
+  <div class="matrix-header">Pairwise Similarity Matrix</div>
+  <div id="matrixTable"></div>
+  <div class="matrix-pair-detail" id="matrixPairDetail"></div>
+</div>
+
+<!-- SCORE (2-code) -->
+<div class="score-section" id="scoreSection">
+  <div class="score-card" id="scoreCard">
+    <div class="score-dial">
+      <svg viewBox="0 0 100 100">
+        <circle class="track" cx="50" cy="50" r="40"/>
+        <circle class="fill" id="dialFill" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+      </svg>
+      <div class="score-label">
+        <div class="score-pct" id="scorePct">0%</div>
+        <div class="score-sub">similar</div>
+      </div>
+    </div>
+    <div>
+      <div class="score-breakdown">
+        <div class="breakdown-item"><div class="bi-label">Common Nodes</div><div class="bi-val green" id="statCommon">—</div></div>
+        <div class="breakdown-item"><div class="bi-label">Edit Distance</div><div class="bi-val red" id="statEdit">—</div></div>
+        <div class="breakdown-item"><div class="bi-label">Tree A Size</div><div class="bi-val cyan" id="statA">—</div></div>
+        <div class="breakdown-item"><div class="bi-label">Tree B Size</div><div class="bi-val cyan" id="statB">—</div></div>
+        <div class="breakdown-item"><div class="bi-label">Tokens A</div><div class="bi-val cyan" id="statTokA">—</div></div>
+        <div class="breakdown-item"><div class="bi-label">Tokens B</div><div class="bi-val cyan" id="statTokB">—</div></div>
+      </div>
+      <div class="threshold-bar">
+        <span style="color:var(--text-dim);">Plagiarism Threshold Indicator</span>
+        <div class="threshold-track"><div class="threshold-cursor" id="thresholdCursor" style="left:0%"></div></div>
+        <div class="threshold-labels"><span style="color:var(--accent3);">LOW</span><span style="color:#ffc107;">MEDIUM</span><span style="color:var(--accent2);">HIGH</span></div>
+      </div>
+    </div>
+    <div class="verdict">
+      <div class="verdict-badge" id="verdictBadge">—</div>
+      <div style="margin-top:10px;">
+        <div class="progress-bar-wrap">
+          <div class="progress-label"><span>Similarity</span><span id="progLabel">0%</span></div>
+          <div class="progress-track" style="width:160px;">
+            <div class="progress-fill" id="progFill" style="width:0%;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="formula-text" style="margin-top:12px;" id="formulaText">score = 1 − edit_dist / max(|A|,|B|)</div>
+      <div class="match-explanation" id="matchExplanation" style="display:none;text-align:left;max-width:240px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS TABS -->
+<div class="results-panel" id="resultsPanel">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('ast')">AST Diff</div>
+    <div class="tab" onclick="switchTab('tokens')">Token Stream</div>
+    <div class="tab" onclick="switchTab('grammar')">CFG Rules</div>
+    <div class="tab" onclick="switchTab('trace')">Parse Trace</div>
+    <div class="tab" onclick="switchTab('tree')">Parse Tree</div>
+    <div class="tab" onclick="switchTab('dfa')">DFA Validation</div>
+    <div class="tab" onclick="switchTab('ambiguity')">Ambiguity</div>
+  </div>
+  <div class="tab-body">
+    <div class="tab-content active" id="tab-ast">
+      <div class="ast-diff" id="astDiff"></div>
+    </div>
+    <div class="tab-content" id="tab-tokens">
+      <div id="tokenDisplay"></div>
+    </div>
+    <div class="tab-content" id="tab-grammar">
+      <div class="grammar-list" id="grammarDisplay"></div>
+    </div>
+    <div class="tab-content" id="tab-trace">
+      <div class="parse-trace" id="traceDisplay"></div>
+    </div>
+    <div class="tab-content" id="tab-tree">
+      <div class="tree-controls">
+        <button onclick="zoomTree(-0.2)">− Zoom Out</button>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <button onclick="zoomTree(0.2)">+ Zoom In</button>
+        <button onclick="resetZoom()">Reset</button>
+        <span style="margin-left:12px;font-family:var(--font-code);font-size:10px;color:var(--text-dim);">Click nodes to highlight. Green = shared. Red = unique.</span>
+      </div>
+      <div id="tree-svg"></div>
+    </div>
+    <div class="tab-content" id="tab-dfa">
+      <div id="dfaDisplay"></div>
+    </div>
+    <div class="tab-content" id="tab-ambiguity">
+      <div id="ambiguityDisplay"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<script>
+// =========================================================
+// ORIGINAL ENGINE — PRESERVED
+// =========================================================
+
+// 1. TOKENIZER
+const KEYWORDS = new Set(['if','else','while','for','return','int','float','var','let','const','true','false','null']);
+
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  src = src.replace(/\/\/[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  while (i < src.length) {
+    if (/\s/.test(src[i])) { i++; continue; }
+    if (/[0-9]/.test(src[i])) {
+      let num = '';
+      while (i < src.length && /[0-9.]/.test(src[i])) num += src[i++];
+      tokens.push({ type:'NUM', val:num }); continue;
+    }
+    if (/[a-zA-Z_]/.test(src[i])) {
+      let id = '';
+      while (i < src.length && /[a-zA-Z0-9_]/.test(src[i])) id += src[i++];
+      tokens.push({ type: KEYWORDS.has(id) ? 'KW' : 'ID', val:id }); continue;
+    }
+    const two = src.slice(i, i+2);
+    if (['==','!=','<=','>=','&&','||','++','--'].includes(two)) { tokens.push({ type:'OP', val:two }); i+=2; continue; }
+    if ('+-*/%=<>!'.includes(src[i])) { tokens.push({ type:'OP', val:src[i++] }); continue; }
+    if (';,'.includes(src[i])) { tokens.push({ type:'DELIM', val:src[i++] }); continue; }
+    if ('(){}'.includes(src[i])) { tokens.push({ type:'DELIM', val:src[i++] }); continue; }
+    i++;
+  }
+  return tokens;
+}
+
+function normalize(tokens) {
+  return tokens.map(t => {
+    if (t.type === 'ID')  return { type:'NORM', val:'ID' };
+    if (t.type === 'NUM') return { type:'NORM', val:'NUM' };
+    return t;
+  });
+}
+
+// 2. CFG GRAMMAR DEFINITION
+const CFG_RULES = [
+  { lhs:'program',   rhs:'stmt*' },
+  { lhs:'stmt',      rhs:'assign | ifStmt | whileStmt | block' },
+  { lhs:'assign',    rhs:'<id> = expr ;' },
+  { lhs:'ifStmt',    rhs:'<if> ( expr ) stmt [ <else> stmt ]' },
+  { lhs:'whileStmt', rhs:'<while> ( expr ) stmt' },
+  { lhs:'block',     rhs:'{ stmt* }' },
+  { lhs:'expr',      rhs:'term ( op term )*' },
+  { lhs:'term',      rhs:'<id> | <num> | ( expr )' },
+  { lhs:'op',        rhs:'+ | - | * | / | < | > | == | != | <= | >=' },
+];
+
+// 3. RECURSIVE DESCENT PARSER → AST
+class Parser {
+  constructor(tokens) {
+    this.tokens = tokens;
+    this.pos = 0;
+    this.trace = [];
+  }
+  peek() { return this.tokens[this.pos] || { type:'EOF', val:'' }; }
+  consume() { return this.tokens[this.pos++] || { type:'EOF', val:'' }; }
+  expect(type, val) {
+    const t = this.peek();
+    if (val ? (t.val === val) : (t.type === type)) return this.consume();
+    return null;
+  }
+  log(rule, tok) { this.trace.push({ rule, token: tok ? tok.val : '—', action:`Matched ${rule}` }); }
+
+  parseProgram() {
+    const node = { type:'program', children:[] };
+    while (this.peek().type !== 'EOF') {
+      const s = this.parseStmt();
+      if (s) node.children.push(s);
+      else { this.consume(); }
+    }
+    this.log('program', null);
+    return node;
+  }
+  parseStmt() {
+    const t = this.peek();
+    if (t.type === 'KW' && t.val === 'if')    return this.parseIf();
+    if (t.type === 'KW' && t.val === 'while') return this.parseWhile();
+    if (t.val === '{') return this.parseBlock();
+    if (t.type === 'ID') return this.parseAssign();
+    return null;
+  }
+  parseAssign() {
+    const id = this.consume();
+    const eq = this.expect('OP', '=');
+    if (!eq) return { type:'assign', children:[], label:`ID=?` };
+    const expr = this.parseExpr();
+    this.expect('DELIM', ';');
+    this.log('assign', id);
+    return { type:'assign', children:[{ type:'id', val:'ID', children:[], label:'ID' }, expr], label:'assign' };
+  }
+  parseIf() {
+    this.consume();
+    this.expect('DELIM','(');
+    const cond = this.parseExpr();
+    this.expect('DELIM',')');
+    const then = this.parseStmtOrBlock();
+    const node = { type:'ifStmt', children:[cond, then], label:'if' };
+    if (this.peek().val === 'else') {
+      this.consume();
+      node.children.push(this.parseStmtOrBlock());
+      node.label = 'if-else';
+    }
+    this.log('ifStmt', null);
+    return node;
+  }
+  parseWhile() {
+    this.consume();
+    this.expect('DELIM','(');
+    const cond = this.parseExpr();
+    this.expect('DELIM',')');
+    const body = this.parseStmtOrBlock();
+    this.log('whileStmt', null);
+    return { type:'whileStmt', children:[cond, body], label:'while' };
+  }
+  parseBlock() {
+    this.expect('DELIM','{');
+    const node = { type:'block', children:[], label:'block' };
+    while (this.peek().type !== 'EOF' && this.peek().val !== '}') {
+      const s = this.parseStmt();
+      if (s) node.children.push(s);
+      else this.consume();
+    }
+    this.expect('DELIM','}');
+    this.log('block', null);
+    return node;
+  }
+  parseStmtOrBlock() {
+    if (this.peek().val === '{') return this.parseBlock();
+    return this.parseStmt() || { type:'empty', children:[], label:'ε' };
+  }
+  parseExpr() {
+    const left = this.parseTerm();
+    const ops = ['+','-','*','/','<','>','==','!=','<=','>=','&&','||'];
+    if (ops.includes(this.peek().val)) {
+      const op = this.consume();
+      const right = this.parseTerm();
+      this.log('expr', op);
+      return { type:'expr', children:[left, { type:'op', val:'OP', children:[], label:op.val }, right], label:'expr' };
+    }
+    return left;
+  }
+  parseTerm() {
+    const t = this.peek();
+    if (t.type === 'ID')  { this.consume(); this.log('term(ID)', t); return { type:'term', val:'ID', children:[], label:'ID' }; }
+    if (t.type === 'NUM') { this.consume(); this.log('term(NUM)', t); return { type:'term', val:'NUM', children:[], label:'NUM' }; }
+    if (t.val === '(') {
+      this.consume();
+      const e = this.parseExpr();
+      this.expect('DELIM',')');
+      return e;
+    }
+    this.consume();
+    return { type:'term', val:'?', children:[], label:'?' };
+  }
+}
+
+// 4. TREE SERIALIZATION & EDIT DISTANCE
+function treeToString(node) {
+  if (!node) return '';
+  const label = node.label || node.type;
+  if (!node.children || node.children.length === 0) return label;
+  return `${label}(${node.children.map(treeToString).join(',')})`;
+}
+function flattenTree(node, arr = []) {
+  if (!node) return arr;
+  arr.push(node.label || node.type);
+  (node.children || []).forEach(c => flattenTree(c, arr));
+  return arr;
+}
+function treeSize(node) {
+  if (!node) return 0;
+  return 1 + (node.children || []).reduce((s, c) => s + treeSize(c), 0);
+}
+function lcs(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length:m+1}, () => new Array(n+1).fill(0));
+  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++) {
+    if (a[i-1]===b[j-1]) dp[i][j]=dp[i-1][j-1]+1;
+    else dp[i][j]=Math.max(dp[i-1][j],dp[i][j-1]);
+  }
+  return dp[m][n];
+}
+function computeSimilarity(treeA, treeB) {
+  const fa = flattenTree(treeA);
+  const fb = flattenTree(treeB);
+  const common = lcs(fa, fb);
+  const editDist = fa.length + fb.length - 2 * common;
+  const maxSize = Math.max(fa.length, fb.length, 1);
+  const score = Math.max(0, 1 - editDist / maxSize);
+  return { score, common, editDist, sizeA: fa.length, sizeB: fb.length, fa, fb };
+}
+
+// 5. AST DIFF VIEW
+function buildAstLines(node, depth = 0, lines = []) {
+  if (!node) return lines;
+  const label = node.label || node.type;
+  const indent = '  '.repeat(depth);
+  lines.push({ label: indent + label, depth, node });
+  (node.children || []).forEach(c => buildAstLines(c, depth+1, lines));
+  return lines;
+}
+
+// 6. SVG TREE RENDERER (enhanced with collapsible state)
+let treeZoom = 1.0;
+let collapsedNodes = new Set();
+
+function renderTreeSVG(nodeA, nodeB, sharedLabels) {
+  const nodeW = 64, nodeH = 28, vGap = 44;
+  const nodesA = [], nodesB = [], edgesA = [], edgesB = [];
+
+  function layout(node, x, y, nodes, edges, parent) {
+    if (!node) return x;
+    const id = nodes.length;
+    const label = node.label || node.type;
+    const nodeId = `n_${id}_${nodes === nodesA ? 'A' : 'B'}`;
+    nodes.push({ id, x, y, label, nodeId, collapsed: collapsedNodes.has(nodeId) });
+    if (parent !== null) edges.push([parent, id]);
+    if (collapsedNodes.has(nodeId)) return x + nodeW + 10;
+    const children = node.children || [];
+    if (children.length === 0) return x + nodeW + 10;
+    let cx = x;
+    children.forEach(c => { cx = layout(c, cx, y + vGap, nodes, edges, id); });
+    const first = nodes.find(n => n.id === id+1);
+    const last = nodes[nodes.length-1];
+    nodes[id].x = first ? (first.x + last.x) / 2 : x;
+    return cx;
+  }
+
+  layout(nodeA, 10, 20, nodesA, edgesA, null);
+  layout(nodeB, 10, 20, nodesB, edgesB, null);
+
+  const shared = sharedLabels || new Set([
+    ...nodesA.map(n=>n.label)
+  ].filter(l => nodesB.some(n=>n.label===l)));
+
+  function drawNodes(nodes, edges, offsetX) {
+    let svg = '';
+    edges.forEach(([p,c]) => {
+      const pn = nodes[p], cn = nodes[c];
+      if (!pn || !cn) return;
+      svg += `<line x1="${(pn.x+offsetX+nodeW/2)*treeZoom}" y1="${(pn.y+nodeH)*treeZoom}" x2="${(cn.x+offsetX+nodeW/2)*treeZoom}" y2="${cn.y*treeZoom}" stroke="#2a3055" stroke-width="1.2"/>`;
+    });
+    nodes.forEach(n => {
+      const inShared = shared.has(n.label);
+      const fill = inShared ? '#1a3a1a' : '#3a1a1a';
+      const stroke = inShared ? '#76ff03' : '#ff4081';
+      const color = inShared ? '#a5d6a7' : '#ef9a9a';
+      const nx = (n.x+offsetX)*treeZoom, ny = n.y*treeZoom;
+      const w = nodeW*treeZoom, h = nodeH*treeZoom;
+      const hasKids = !n.collapsed;
+      svg += `<g class="tree-node-clickable" onclick="toggleNode('${n.nodeId}')">`;
+      svg += `<rect x="${nx}" y="${ny}" width="${w}" height="${h}" rx="${4*treeZoom}" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>`;
+      if (n.collapsed) svg += `<rect x="${nx+w-8}" y="${ny+2}" width="6" height="6" rx="1" fill="${stroke}" opacity="0.8"/>`;
+      svg += `<text x="${nx+w/2}" y="${ny+h*0.65}" text-anchor="middle" fill="${color}" font-size="${9*treeZoom}" font-family="JetBrains Mono">${n.label.slice(0,10)}</text>`;
+      svg += `</g>`;
+    });
+    return svg;
+  }
+
+  const maxH = Math.max(
+    nodesA.reduce((m,n)=>Math.max(m,n.y),0),
+    nodesB.reduce((m,n)=>Math.max(m,n.y),0)
+  ) * treeZoom + nodeH*treeZoom + 20;
+  const maxWA = (nodesA.reduce((m,n)=>Math.max(m,n.x+nodeW),0) + 20) * treeZoom;
+  const maxWB = (nodesB.reduce((m,n)=>Math.max(m,n.x+nodeW),0) + 20) * treeZoom;
+  const totalW = maxWA + maxWB + 40;
+  const fs = 9*treeZoom;
+
+  let svg = `<svg viewBox="0 0 ${totalW} ${maxH}" xmlns="http://www.w3.org/2000/svg" style="background:#12141a;border-radius:6px;min-width:${totalW}px;">`;
+  svg += `<text x="10" y="${14*treeZoom}" fill="#7a8099" font-size="${fs}" font-family="Syne" letter-spacing="2">SNIPPET A</text>`;
+  svg += drawNodes(nodesA, edgesA, 0);
+  svg += `<line x1="${maxWA+10}" y1="0" x2="${maxWA+10}" y2="${maxH}" stroke="#2a2f45" stroke-width="1"/>`;
+  svg += `<text x="${maxWA+20}" y="${14*treeZoom}" fill="#7a8099" font-size="${fs}" font-family="Syne" letter-spacing="2">SNIPPET B</text>`;
+  svg += drawNodes(nodesB, edgesB, maxWA+20);
+  svg += `</svg>`;
+  return svg;
+}
+
+// =========================================================
+// NEW v2 — DFA TOKEN VALIDATOR
+// =========================================================
+// States: q0=start, q1=after_ID, q2=after_OP, q3=after_NUM, q4=after_KW, qDEAD=invalid
+const DFA_STATES = ['q0','q1','q2','q3','q4','qDEAD'];
+const DFA_TRANSITIONS = {
+  //         KW      ID      NUM     OP      DELIM   EOF
+  q0:    { KW:'q4', ID:'q1', NUM:'q3', OP:'q2',  DELIM:'q0',  EOF:'q0' },
+  q1:    { KW:'q4', ID:'q1', NUM:'q3', OP:'q2',  DELIM:'q0',  EOF:'q0' },
+  q2:    { KW:'q4', ID:'q1', NUM:'q3', OP:'qDEAD',DELIM:'q0', EOF:'qDEAD' },
+  q3:    { KW:'q4', ID:'q1', NUM:'q3', OP:'q2',  DELIM:'q0',  EOF:'q0' },
+  q4:    { KW:'q4', ID:'q1', NUM:'q3', OP:'q2',  DELIM:'q0',  EOF:'q0' },
+  qDEAD: { KW:'qDEAD',ID:'qDEAD',NUM:'qDEAD',OP:'qDEAD',DELIM:'qDEAD',EOF:'qDEAD' },
+};
+const DFA_ACCEPT = new Set(['q0','q1','q3','q4']);
+
+function dfaValidate(tokens) {
+  let state = 'q0';
+  const path = [{ state, token: null }];
+  let invalid = [];
+  tokens.forEach((tok, i) => {
+    const ttype = tok.type === 'NORM' ? 'ID' : tok.type;
+    const next = (DFA_TRANSITIONS[state] || {})[ttype] || 'qDEAD';
+    if (next === 'qDEAD') invalid.push({ idx:i, tok, from:state });
+    state = next;
+    path.push({ state, token: tok });
+  });
+  const accepted = DFA_ACCEPT.has(state);
+  return { accepted, finalState: state, path, invalid };
+}
+
+// =========================================================
+// NEW v2 — ENHANCED DETECTION
+// =========================================================
+function detectMatchTypes(tokA, tokB, treeA, treeB, result) {
+  const reasons = [];
+  const pct = Math.round(result.score * 100);
+
+  // Exact match check (normalized token streams identical)
+  const normA = normalize(tokA).map(t=>t.val).join(',');
+  const normB = normalize(tokB).map(t=>t.val).join(',');
+  if (normA === normB) {
+    reasons.push({ type:'exact', icon:'🔴', text:'Exact structural match (after normalization)' });
+  } else if (pct >= 70) {
+    reasons.push({ type:'renamed', icon:'🟡', text:`Variable renaming detected — structural identity ${pct}%` });
+  }
+
+  // Tree structure comparison
+  const strA = treeToString(treeA), strB = treeToString(treeB);
+  if (strA === strB) {
+    reasons.push({ type:'structural', icon:'🟢', text:'Perfect parse tree equivalence (structural match)' });
+  } else {
+    const commonTypes = new Set(flattenTree(treeA).filter(n => flattenTree(treeB).includes(n)));
+    if (commonTypes.size > 3) {
+      reasons.push({ type:'structural', icon:'🔵', text:`${commonTypes.size} common grammar constructs: ${[...commonTypes].slice(0,4).join(', ')}` });
+    }
+  }
+
+  // Reordering check
+  const setA = new Set(flattenTree(treeA).filter(n => ['if','if-else','while','assign','block'].includes(n)));
+  const setB = new Set(flattenTree(treeB).filter(n => ['if','if-else','while','assign','block'].includes(n)));
+  const sameStmts = [...setA].every(s => setB.has(s)) && [...setB].every(s => setA.has(s));
+  if (sameStmts && setA.size > 0 && strA !== strB) {
+    reasons.push({ type:'reorder', icon:'🔶', text:'Same statement types — possible reordering of logic' });
+  }
+
+  if (reasons.length === 0 && pct > 0) {
+    reasons.push({ type:'partial', icon:'⬜', text:`Partial similarity ${pct}% — shared grammar patterns` });
+  }
+
+  return reasons;
+}
+
+// =========================================================
+// NEW v2 — AMBIGUITY DETECTION
+// =========================================================
+function detectAmbiguity(src) {
+  // Check if grammar can produce multiple parse trees for any subexpression
+  // For our grammar: dangling else is the main source of ambiguity
+  const ambiguities = [];
+  const danglingElse = /if\s*\(.*\)\s*if\s*\(.*\)\s*[^{]*else/s.test(src);
+  if (danglingElse) {
+    ambiguities.push({
+      rule: 'ifStmt',
+      desc: 'Dangling Else Ambiguity',
+      detail: 'The grammar allows "if(A) if(B) S else S2" to be parsed in two ways: else can attach to either if-statement.',
+      trees: ['if(A) { if(B) S else S2 }', 'if(A) { if(B) S } else S2']
+    });
+  }
+  // Check for operator associativity ambiguity
+  const chainOp = /[a-zA-Z0-9_]+\s*[+\-\*\/]\s*[a-zA-Z0-9_]+\s*[+\-\*\/]\s*[a-zA-Z0-9_]+/.test(src);
+  if (chainOp) {
+    ambiguities.push({
+      rule: 'expr',
+      desc: 'Operator Associativity',
+      detail: 'The grammar expr → term op term does not define associativity for chained operations (e.g. a+b+c).',
+      trees: ['(a+b)+c', 'a+(b+c)']
+    });
+  }
+  return ambiguities;
+}
+
+// =========================================================
+// NEW v2 — MULTI-PANEL MANAGEMENT
+// =========================================================
+const PANEL_COLORS = ['#00e5ff','#ff4081','#76ff03','#bb86fc','#ffc107'];
+const PANEL_LETTERS = ['A','B','C','D','E','F','G','H'];
+let panels = [];
+let panelCounter = 0;
+
+function createPanelEl(idx) {
+  const color = PANEL_COLORS[idx % PANEL_COLORS.length];
+  const letter = PANEL_LETTERS[idx % PANEL_LETTERS.length];
+  const id = 'panel_' + panelCounter++;
+  const div = document.createElement('div');
+  div.className = 'editor-panel';
+  div.dataset.panelId = id;
+  div.dataset.idx = idx;
+  div.innerHTML = `
+    <div class="panel-header">
+      <div class="panel-title"><span class="panel-letter" style="color:${color}">${letter}</span> — Code Snippet ${letter}</div>
+      <div class="panel-actions">
+        <span class="line-count" id="lines_${id}">0 lines</span>
+        ${idx >= 2 ? `<button class="btn-icon remove" onclick="removePanel('${id}')" title="Remove panel">✕</button>` : ''}
+      </div>
+    </div>
+    <textarea id="ta_${id}" spellcheck="false" placeholder="// Paste or type code here\n// Supports: assignments, while, if/else, blocks"></textarea>
+    <label class="drop-zone" for="file_${id}" id="drop_${id}">
+      ⬆ Drop .txt/.js file or click to upload
+      <input type="file" id="file_${id}" accept=".txt,.js,.py,.c,.cpp,.java">
+    </label>
+  `;
+  // File input handler
+  setTimeout(() => {
+    const fileInput = div.querySelector(`#file_${id}`);
+    const dropZone = div.querySelector(`#drop_${id}`);
+    const ta = div.querySelector(`#ta_${id}`);
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => { ta.value = ev.target.result; updateLineCount(id); };
+      reader.readAsText(file);
+    });
+    // Drag and drop
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => { ta.value = ev.target.result; updateLineCount(id); };
+      reader.readAsText(file);
+    });
+    ta.addEventListener('input', () => updateLineCount(id));
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') { e.preventDefault(); const s = this.selectionStart; this.value = this.value.slice(0,s) + '  ' + this.value.slice(this.selectionEnd); this.selectionStart = this.selectionEnd = s + 2; }
+    });
+  }, 0);
+  return { el: div, id, letter, color };
+}
+
+function addPanel(src) {
+  const idx = panels.length;
+  if (idx >= 8) return; // max 8
+  const p = createPanelEl(idx);
+  panels.push(p);
+  const scroll = document.getElementById('editorsScroll');
+  scroll.insertBefore(p.el, document.getElementById('addPanelBtn'));
+  if (src) document.getElementById('ta_' + p.id).value = src;
+  updateLineCount(p.id);
+  updateCountPrompt();
+  if (idx >= 7) document.getElementById('addPanelBtn').style.display = 'none';
+}
+
+function removePanel(id) {
+  const idx = panels.findIndex(p => p.id === id);
+  if (idx < 0 || panels.length <= 2) return;
+  panels[idx].el.remove();
+  panels.splice(idx, 1);
+  // Re-index
+  panels.forEach((p, i) => {
+    p.el.dataset.idx = i;
+    p.letter = PANEL_LETTERS[i % PANEL_LETTERS.length];
+    p.color = PANEL_COLORS[i % PANEL_COLORS.length];
+  });
+  document.getElementById('addPanelBtn').style.display = '';
+  updateCountPrompt();
+}
+
+function updateLineCount(id) {
+  const ta = document.getElementById('ta_' + id);
+  const el = document.getElementById('lines_' + id);
+  if (!ta || !el) return;
+  const lines = (ta.value.match(/\n/g)||[]).length + (ta.value ? 1 : 0);
+  el.textContent = ta.value ? lines + ' lines' : '0 lines';
+}
+
+function updateCountPrompt() {
+  const prompt = document.getElementById('countPrompt');
+  prompt.classList.toggle('visible', panels.length > 2);
+}
+
+function getPanelValues() {
+  return panels.map(p => document.getElementById('ta_' + p.id).value.trim());
+}
+
+// Initialize 2 default panels
+addPanel();
+addPanel();
+
+// =========================================================
+// NEW v2 — HISTORY
+// =========================================================
+let history = [];
+
+function addHistory(codes, results) {
+  const time = new Date().toLocaleTimeString();
+  const entry = { time, codes: codes.map((c,i) => PANEL_LETTERS[i]).join('+'), results };
+  history.unshift(entry);
+  if (history.length > 10) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const sec = document.getElementById('historySection');
+  const list = document.getElementById('historyList');
+  if (!history.length) { sec.classList.remove('has-items'); return; }
+  sec.classList.add('has-items');
+  list.innerHTML = history.map((h, hi) => {
+    if (!h.results || !h.results.length) return '';
+    const r = h.results[0];
+    const pct = Math.round(r.score * 100);
+    const cls = pct >= 70 ? 'high' : pct >= 40 ? 'med' : 'low';
+    return `<div class="history-item" onclick="recallHistory(${hi})">
+      <span class="h-time">${h.time}</span>
+      <span class="h-codes">Codes: ${h.codes}</span>
+      <span class="h-score ${cls}">${pct}%</span>
+      <span style="color:var(--text-dim);font-size:10px;">${h.results.length} pair(s)</span>
+    </div>`;
+  }).join('');
+}
+
+function recallHistory(idx) {
+  // Just flash — in a full backend app this would reload the codes
+  const h = history[idx];
+  if (!h) return;
+  const errEl = document.getElementById('errorMsg');
+  errEl.textContent = `History: Run at ${h.time} — ${h.results.length} comparisons. Load codes and re-run to see full details.`;
+  errEl.style.borderColor = 'rgba(0,229,255,0.3)';
+  errEl.style.color = 'var(--accent)';
+  errEl.style.background = 'rgba(0,229,255,0.05)';
+  errEl.classList.add('visible');
+  setTimeout(() => { errEl.classList.remove('visible'); errEl.style = ''; }, 3000);
+}
+
+function clearHistory() {
+  history = [];
+  renderHistory();
+}
+
+// =========================================================
+// NEW v2 — TREE ZOOM & INTERACTION
+// =========================================================
+function zoomTree(delta) {
+  treeZoom = Math.max(0.4, Math.min(2.0, treeZoom + delta));
+  document.getElementById('zoomLabel').textContent = Math.round(treeZoom * 100) + '%';
+  if (lastResult) displayTreeSVG(lastResult.treeA, lastResult.treeB);
+}
+function resetZoom() {
+  treeZoom = 1.0;
+  document.getElementById('zoomLabel').textContent = '100%';
+  if (lastResult) displayTreeSVG(lastResult.treeA, lastResult.treeB);
+}
+function toggleNode(nodeId) {
+  if (collapsedNodes.has(nodeId)) collapsedNodes.delete(nodeId);
+  else collapsedNodes.add(nodeId);
+  if (lastResult) displayTreeSVG(lastResult.treeA, lastResult.treeB);
+}
+
+// =========================================================
+// DISPLAY FUNCTIONS (original + enhanced)
+// =========================================================
+function displayScore(result) {
+  const pct = Math.round(result.score * 100);
+  const circumference = 251.2;
+  const offset = circumference - (pct / 100) * circumference;
+
+  document.getElementById('scorePct').textContent = pct + '%';
+  document.getElementById('statCommon').textContent = result.common;
+  document.getElementById('statEdit').textContent  = result.editDist;
+  document.getElementById('statA').textContent     = result.sizeA;
+  document.getElementById('statB').textContent     = result.sizeB;
+  document.getElementById('statTokA').textContent  = result.fa.length;
+  document.getElementById('statTokB').textContent  = result.fb.length;
+
+  const dialFill = document.getElementById('dialFill');
+  dialFill.style.strokeDashoffset = offset;
+  const color = pct >= 70 ? '#ff4081' : pct >= 40 ? '#ffc107' : '#76ff03';
+  dialFill.style.stroke = color;
+
+  const badge = document.getElementById('verdictBadge');
+  const prog = document.getElementById('progFill');
+  const progLabel = document.getElementById('progLabel');
+
+  if (pct >= 70) {
+    badge.textContent = '⚠ HIGH SIMILARITY'; badge.className = 'verdict-badge high';
+  } else if (pct >= 40) {
+    badge.textContent = '~ MODERATE'; badge.className = 'verdict-badge medium';
+  } else {
+    badge.textContent = '✓ LOW SIMILARITY'; badge.className = 'verdict-badge low';
+  }
+  prog.style.width = pct + '%'; prog.style.background = color;
+  progLabel.textContent = pct + '%';
+  document.getElementById('formulaText').textContent =
+    `score = 1 − ${result.editDist} / max(${result.sizeA}, ${result.sizeB}) = ${(result.score).toFixed(3)}`;
+
+  // Threshold cursor
+  document.getElementById('thresholdCursor').style.left = pct + '%';
+}
+
+function displayMatchExplanation(reasons) {
+  const el = document.getElementById('matchExplanation');
+  if (!reasons.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = '<div style="color:var(--text-dim);margin-bottom:6px;font-size:10px;letter-spacing:1px;">WHY FLAGGED:</div>' +
+    reasons.map(r => `<div class="why-item"><span class="why-icon">${r.icon}</span><span>${r.text}</span></div>`).join('');
+}
+
+function displayAstDiff(treeA, treeB, fa, fb) {
+  const linesA = buildAstLines(treeA);
+  const linesB = buildAstLines(treeB);
+  function render(lines, sharedSet, side) {
+    return lines.map((l, i) => {
+      const label = l.label.trim();
+      const cls = sharedSet.has(label) ? 'match' : 'diff';
+      return `<div class="ast-node ${cls}" style="padding-left:${l.depth*14+8}px" data-label="${label}" data-side="${side}">${l.label}</div>`;
+    }).join('');
+  }
+  document.getElementById('astDiff').innerHTML = `
+    <div class="ast-col">
+      <div class="ast-col-header">Snippet A — Parse Tree</div>
+      <div class="ast-tree">${render(linesA, new Set(fb), 'A')}</div>
+    </div>
+    <div class="ast-col">
+      <div class="ast-col-header">Snippet B — Parse Tree</div>
+      <div class="ast-tree">${render(linesB, new Set(fa), 'B')}</div>
+    </div>`;
+  // Highlight on click
+  document.querySelectorAll('.ast-node').forEach(el => {
+    el.addEventListener('click', function() {
+      const lbl = this.dataset.label;
+      document.querySelectorAll('.ast-node').forEach(n => n.classList.toggle('highlighted', n.dataset.label === lbl));
+    });
+  });
+}
+
+function displayTokens(tokA, tokB) {
+  function renderStream(toks) {
+    return toks.map(t => `<span class="token ${t.type}">${escHtml(t.val)}</span>`).join('');
+  }
+  document.getElementById('tokenDisplay').innerHTML = `
+    <div class="token-section">
+      <div class="token-section-label">Snippet A — Raw Token Stream (${tokA.length} tokens)</div>
+      <div class="token-stream">${renderStream(tokA)}</div>
+    </div>
+    <div class="token-section">
+      <div class="token-section-label">Snippet B — Raw Token Stream (${tokB.length} tokens)</div>
+      <div class="token-stream">${renderStream(tokB)}</div>
+    </div>
+    <div class="token-section" style="margin-top:16px;">
+      <div class="token-section-label">Normalization Legend</div>
+      <div class="token-stream">
+        <span class="token KW">keyword</span>
+        <span class="token ID">identifier</span>
+        <span class="token NUM">number</span>
+        <span class="token OP">operator</span>
+        <span class="token DELIM">delimiter</span>
+        <span class="token NORM">NORM (abstracted)</span>
+      </div>
+    </div>`;
+}
+
+function displayGrammar() {
+  const kws = ['if','else','while','for','return'];
+  const metas = ['*','|','(',')','[',']','?'];
+  function colorRhs(rhs) {
+    return rhs.split(' ').map(w => {
+      if (kws.includes(w)) return `<span class="kw">${w}</span>`;
+      if (metas.includes(w)) return `<span class="meta">${w}</span>`;
+      return w;
+    }).join(' ');
+  }
+  let html = '<div class="grammar-list">' + CFG_RULES.map(r =>
+    `<div class="grammar-rule">
+      <span class="lhs">${r.lhs}</span>
+      <span class="arrow">→</span>
+      <span class="rhs">${colorRhs(r.rhs)}</span>
+    </div>`
+  ).join('') + '</div>';
+  html += `<div class="grammar-ambiguity-note" style="margin-top:16px;">
+    ⚠ Grammar Type: <strong>Type-2 Context-Free (Chomsky Hierarchy)</strong><br>
+    Recognition by: <strong>Pushdown Automaton (PDA)</strong><br>
+    Parser class: <strong>LL(1) — Recursive Descent</strong><br>
+    Known sources of ambiguity: <strong>Dangling Else</strong>, chained operator expressions
+  </div>`;
+  document.getElementById('grammarDisplay').innerHTML = html;
+}
+
+function displayTrace(trace) {
+  document.getElementById('traceDisplay').innerHTML = trace.slice(0,80).map((t,i) =>
+    `<div class="trace-step" style="animation-delay:${i*8}ms">
+      <span class="step-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="step-rule">${t.rule}</span>
+      <span class="step-token">↦ ${t.token}</span>
+      <span class="step-action">${t.action}</span>
+    </div>`
+  ).join('') + (trace.length > 80 ? `<div class="trace-step" style="color:var(--text-dim)">… ${trace.length-80} more steps</div>` : '');
+}
+
+function displayTreeSVG(treeA, treeB) {
+  document.getElementById('tree-svg').innerHTML = renderTreeSVG(treeA, treeB);
+}
+
+// =========================================================
+// NEW v2 — DFA DISPLAY
+// =========================================================
+function displayDFA(dfaA, dfaB, tokA, tokB) {
+  const stateColors = { q0:'#7a8099', q1:'#76ff03', q2:'#ff4081', q3:'#ffc107', q4:'#00e5ff', qDEAD:'#ef5350' };
+
+  function renderDFAResult(dfa, label) {
+    const statusCls = dfa.accepted ? 'ok' : 'fail';
+    const statusText = dfa.accepted ? '✓ ACCEPTED' : '✗ REJECTED';
+    let html = `<div style="margin-bottom:16px;">
+      <div class="token-section-label">${label}</div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;font-family:var(--font-code);font-size:11px;">
+        <span>Final State: <strong style="color:${stateColors[dfa.finalState]}">${dfa.finalState}</strong></span>
+        <span class="dfa-status ${statusCls}">${statusText}</span>
+      </div>`;
+    if (dfa.invalid.length) {
+      html += `<div style="background:rgba(255,64,129,0.08);border:1px solid rgba(255,64,129,0.3);border-radius:3px;padding:8px 12px;font-family:var(--font-code);font-size:10px;color:var(--accent2);margin-bottom:8px;">
+        ⚠ ${dfa.invalid.length} potentially invalid transition(s): ${dfa.invalid.map(x=>`'${x.tok.val}'`).join(', ')}
+      </div>`;
+    }
+    // State path visualization
+    html += `<div class="dfa-states">`;
+    dfa.path.slice(0, 20).forEach((step, i) => {
+      const isFinal = i === dfa.path.length - 1;
+      html += `<span class="dfa-state ${isFinal ? (dfa.accepted ? 'accept' : 'reject') : ''}" style="border-color:${stateColors[step.state]};color:${stateColors[step.state]}">
+        ${step.state}${step.token ? '<br><span style="color:#7a8099;font-size:9px;">'+escHtml(step.token.val)+'</span>' : ''}
+      </span>`;
+    });
+    if (dfa.path.length > 20) html += `<span class="dfa-state" style="border-style:dashed">…+${dfa.path.length-20}</span>`;
+    html += `</div></div>`;
+    return html;
+  }
+
+  // Transition table
+  const symbols = ['KW','ID','NUM','OP','DELIM'];
+  let table = `<div style="margin-top:16px;"><div class="token-section-label">DFA Transition Table δ(q,a)</div>
+    <table class="dfa-transition-table"><thead><tr><th>State</th>${symbols.map(s=>`<th>${s}</th>`).join('')}</tr></thead><tbody>`;
+  DFA_STATES.filter(s=>s!=='qDEAD').forEach(st => {
+    table += `<tr><td style="color:${stateColors[st]};font-weight:700;">${st}${DFA_ACCEPT.has(st)?'*':''}</td>`;
+    symbols.forEach(sym => {
+      const next = DFA_TRANSITIONS[st][sym];
+      table += `<td style="color:${stateColors[next]}">${next}</td>`;
+    });
+    table += `</tr>`;
+  });
+  table += `</tbody></table><div style="font-family:var(--font-code);font-size:10px;color:var(--text-dim);margin-top:6px;">* = accept state</div></div>`;
+
+  document.getElementById('dfaDisplay').innerHTML =
+    renderDFAResult(dfaA, 'Snippet A — DFA Trace') +
+    renderDFAResult(dfaB, 'Snippet B — DFA Trace') +
+    table;
+}
+
+// =========================================================
+// NEW v2 — AMBIGUITY DISPLAY
+// =========================================================
+function displayAmbiguity(srcA, srcB) {
+  const ambA = detectAmbiguity(srcA);
+  const ambB = detectAmbiguity(srcB);
+  const all = [
+    ...ambA.map(a => ({...a, src:'Snippet A'})),
+    ...ambB.map(a => ({...a, src:'Snippet B'}))
+  ];
+
+  if (!all.length) {
+    document.getElementById('ambiguityDisplay').innerHTML = `
+      <div style="background:rgba(118,255,3,0.08);border:1px solid rgba(118,255,3,0.3);border-radius:4px;padding:14px 18px;font-family:var(--font-code);font-size:12px;color:var(--accent3);">
+        ✓ No ambiguity detected in either code snippet for this grammar subset.
+        <br><span style="color:var(--text-dim);font-size:10px;margin-top:4px;display:block;">Checked: Dangling Else, Operator Associativity chains, Multiple derivations</span>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('ambiguityDisplay').innerHTML = `
+    <div style="font-family:var(--font-code);font-size:11px;color:var(--text-dim);margin-bottom:12px;">
+      ⚠ ${all.length} ambiguity source(s) detected. A grammar is ambiguous if a string has multiple leftmost derivations (multiple parse trees).
+    </div>` +
+    all.map(a => `
+      <div style="background:rgba(255,193,7,0.08);border:1px solid rgba(255,193,7,0.3);border-radius:4px;padding:14px 18px;margin-bottom:10px;">
+        <div style="color:#ffc107;font-weight:700;font-family:var(--font-code);font-size:12px;">${a.src} — ${a.desc}</div>
+        <div style="color:var(--text-dim);font-family:var(--font-code);font-size:11px;margin-top:6px;">Rule: <span style="color:var(--accent)">${a.rule}</span></div>
+        <div style="color:var(--text);font-family:var(--font-code);font-size:11px;margin-top:4px;">${a.detail}</div>
+        <div style="display:flex;gap:12px;margin-top:10px;">
+          ${a.trees.map(t => `<div style="background:var(--surface3);border-radius:3px;padding:6px 10px;font-family:var(--font-code);font-size:11px;color:var(--accent3);">Parse 1: ${escHtml(t)}</div>`).join('')}
+        </div>
+      </div>`
+    ).join('');
+}
+
+// =========================================================
+// NEW v2 — SIMILARITY MATRIX
+// =========================================================
+function displayMatrix(codes, labels, colors, allParsed) {
+  const n = codes.length;
+  let pairs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i+1; j < n; j++) {
+      const result = computeSimilarity(allParsed[i].tree, allParsed[j].tree);
+      pairs.push({ i, j, result, pct: Math.round(result.score * 100) });
+    }
+  }
+
+  // Build matrix
+  let html = `<table class="matrix-table"><thead><tr><th></th>`;
+  labels.forEach((l, i) => { html += `<th style="color:${colors[i]}">${l}</th>`; });
+  html += `</tr></thead><tbody>`;
+  for (let i = 0; i < n; i++) {
+    html += `<tr><th style="color:${colors[i]}">${labels[i]}</th>`;
+    for (let j = 0; j < n; j++) {
+      if (i === j) { html += `<td class="self">—</td>`; continue; }
+      const pair = pairs.find(p => (p.i===i && p.j===j) || (p.i===j && p.j===i));
+      if (!pair) { html += `<td>?</td>`; continue; }
+      const pct = pair.pct;
+      const cls = pct >= 70 ? 'high-sim' : pct >= 40 ? 'med-sim' : 'low-sim';
+      html += `<td class="${cls}" onclick="showMatrixPair(${pair.i},${pair.j})" title="Click for details">${pct}%</td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  document.getElementById('matrixTable').innerHTML = html;
+  document.getElementById('matrixSection').classList.add('visible');
+
+  // Store pairs for click-through
+  window._matrixPairs = pairs;
+  window._matrixParsed = allParsed;
+  window._matrixLabels = labels;
+}
+
+function showMatrixPair(i, j) {
+  const pairs = window._matrixPairs || [];
+  const pair = pairs.find(p => (p.i===i && p.j===j) || (p.i===j && p.j===i));
+  if (!pair) return;
+  const labels = window._matrixLabels || [];
+  const pct = pair.pct;
+  const cls = pct >= 70 ? 'high' : pct >= 40 ? 'med' : 'low';
+  const clsLabel = pct >= 70 ? '⚠ HIGH' : pct >= 40 ? '~ MODERATE' : '✓ LOW';
+  const detail = document.getElementById('matrixPairDetail');
+  detail.innerHTML = `
+    <strong style="color:var(--accent)">${labels[pair.i]} vs ${labels[pair.j]}</strong>
+    &nbsp;—&nbsp; Similarity: <strong>${pct}%</strong>
+    &nbsp;<span style="color:${pct>=70?'var(--accent2)':pct>=40?'#ffc107':'var(--accent3)'}">${clsLabel}</span>
+    &nbsp;|&nbsp; Common nodes: <strong>${pair.result.common}</strong>
+    &nbsp;|&nbsp; Edit distance: <strong>${pair.result.editDist}</strong>
+    &nbsp;|&nbsp; Tree sizes: <strong>${pair.result.sizeA}</strong> vs <strong>${pair.result.sizeB}</strong>
+  `;
+  detail.classList.add('visible');
+}
+
+// =========================================================
+// MAIN ANALYSIS (extended)
+// =========================================================
+let lastResult = null;
+
+function runAnalysis() {
+  const codes = getPanelValues();
+  const errEl = document.getElementById('errorMsg');
+  errEl.classList.remove('visible');
+  errEl.style = '';
+
+  const nonEmpty = codes.filter(c => c.length > 0);
+  if (nonEmpty.length < 2) {
+    errEl.textContent = 'Please enter code in at least 2 panels before analyzing.';
+    errEl.classList.add('visible'); return;
+  }
+
+  // Show loading
+  const bar = document.getElementById('loadingBar');
+  const fill = document.getElementById('loadingFill');
+  bar.classList.add('active');
+  let pct = 0;
+  const timer = setInterval(() => { pct = Math.min(pct+10, 90); fill.style.width = pct+'%'; }, 60);
+
+  setTimeout(() => {
+    try {
+      const useDFA = document.getElementById('dfaToggle').checked;
+      const allParsed = nonEmpty.map((src, idx) => {
+        const tok = tokenize(src);
+        const norm = normalize(tok);
+        const parser = new Parser([...norm]);
+        const tree = parser.parseProgram();
+        const dfa = useDFA ? dfaValidate(tok) : null;
+        return { src, tok, norm, tree, trace: parser.trace, dfa, label: PANEL_LETTERS[idx], color: PANEL_COLORS[idx] };
+      });
+
+      clearInterval(timer);
+      fill.style.width = '100%';
+      setTimeout(() => { bar.classList.remove('active'); fill.style.width='0%'; }, 400);
+
+      const labels = allParsed.map(p => p.label);
+      const colors = allParsed.map(p => p.color);
+
+      if (nonEmpty.length === 2) {
+        // Original 2-code flow + enhanced
+        const pA = allParsed[0], pB = allParsed[1];
+        const result = computeSimilarity(pA.tree, pB.tree);
+        const reasons = detectMatchTypes(pA.tok, pB.tok, pA.tree, pB.tree, result);
+
+        lastResult = { treeA: pA.tree, treeB: pB.tree, tokA: pA.tok, tokB: pB.tok, result,
+                       traceA: pA.trace, traceB: pB.trace, dfaA: pA.dfa, dfaB: pB.dfa,
+                       srcA: pA.src, srcB: pB.src };
+
+        displayScore(result);
+        displayMatchExplanation(reasons);
+        displayAstDiff(pA.tree, pB.tree, result.fa, result.fb);
+        displayTokens(pA.tok, pB.tok);
+        displayGrammar();
+        displayTrace([...pA.trace, ...pB.trace]);
+        displayTreeSVG(pA.tree, pB.tree);
+        if (useDFA && pA.dfa && pB.dfa) displayDFA(pA.dfa, pB.dfa, pA.tok, pB.tok);
+        displayAmbiguity(pA.src, pB.src);
+
+        document.getElementById('scoreSection').classList.add('visible');
+        document.getElementById('matrixSection').classList.remove('visible');
+        document.getElementById('resultsPanel').classList.add('visible');
+        switchTab('ast');
+
+        addHistory(nonEmpty, [result]);
+
+      } else {
+        // Multi-code: matrix mode
+        displayMatrix(nonEmpty, labels, colors, allParsed);
+        document.getElementById('scoreSection').classList.remove('visible');
+        document.getElementById('resultsPanel').classList.add('visible');
+
+        // Show first pair in results tabs
+        const pA = allParsed[0], pB = allParsed[1];
+        const result = computeSimilarity(pA.tree, pB.tree);
+        lastResult = { treeA: pA.tree, treeB: pB.tree, tokA: pA.tok, tokB: pB.tok, result,
+                       traceA: pA.trace, traceB: pB.trace, dfaA: pA.dfa, dfaB: pB.dfa,
+                       srcA: pA.src, srcB: pB.src };
+
+        displayAstDiff(pA.tree, pB.tree, result.fa, result.fb);
+        displayTokens(pA.tok, pB.tok);
+        displayGrammar();
+        displayTrace([...pA.trace, ...pB.trace]);
+        displayTreeSVG(pA.tree, pB.tree);
+        if (useDFA && pA.dfa && pB.dfa) displayDFA(pA.dfa, pB.dfa, pA.tok, pB.tok);
+        displayAmbiguity(pA.src, pB.src);
+        switchTab('ast');
+
+        const allResults = [];
+        for (let i=0;i<allParsed.length;i++) for (let j=i+1;j<allParsed.length;j++) {
+          allResults.push(computeSimilarity(allParsed[i].tree, allParsed[j].tree));
+        }
+        addHistory(nonEmpty, allResults);
+      }
+
+      // DFA status indicator
+      if (useDFA && allParsed[0].dfa) {
+        const ok = allParsed.every(p => p.dfa && p.dfa.accepted);
+        const statusEl = document.getElementById('dfaStatus');
+        statusEl.className = 'dfa-status ' + (ok ? 'ok' : 'fail');
+        statusEl.textContent = ok ? '✓ All tokens validated by DFA' : '⚠ DFA found suspicious token sequences';
+      }
+
+    } catch(e) {
+      clearInterval(timer);
+      bar.classList.remove('active');
+      errEl.textContent = 'Parse error: ' + e.message;
+      errEl.classList.add('visible');
+    }
+  }, 600);
+}
+
+// =========================================================
+// DEMOS
+// =========================================================
+function loadDemo(type) {
+  const highA = `x = 10;\ny = 20;\nif (x < y) {\n  result = y - x;\n} else {\n  result = x - y;\n}\nwhile (result > 0) {\n  result = result - 1;\n}`;
+  const highB = `a = 100;\nb = 200;\nif (a < b) {\n  diff = b - a;\n} else {\n  diff = a - b;\n}\nwhile (diff > 0) {\n  diff = diff - 1;\n}`;
+  const lowA = `x = 5;\ny = x + 3;\nwhile (y > 0) {\n  y = y - 1;\n}`;
+  const lowB = `if (score < 100) {\n  bonus = score + 50;\n  total = bonus * 2;\n} else {\n  total = 0;\n}`;
+  const multiC = `n = 10;\nsum = 0;\nwhile (n > 0) {\n  sum = sum + n;\n  n = n - 1;\n}`;
+
+  if (type === 'high') {
+    document.getElementById('ta_' + panels[0].id).value = highA;
+    document.getElementById('ta_' + panels[1].id).value = highB;
+  } else if (type === 'low') {
+    document.getElementById('ta_' + panels[0].id).value = lowA;
+    document.getElementById('ta_' + panels[1].id).value = lowB;
+  } else if (type === 'multi') {
+    document.getElementById('ta_' + panels[0].id).value = highA;
+    document.getElementById('ta_' + panels[1].id).value = highB;
+    if (panels.length < 3) addPanel();
+    document.getElementById('ta_' + panels[2].id).value = multiC;
+  }
+  panels.forEach(p => updateLineCount(p.id));
+}
+
+function clearAll() {
+  panels.forEach(p => {
+    const ta = document.getElementById('ta_' + p.id);
+    if (ta) ta.value = '';
+    updateLineCount(p.id);
+  });
+  document.getElementById('scoreSection').classList.remove('visible');
+  document.getElementById('matrixSection').classList.remove('visible');
+  document.getElementById('resultsPanel').classList.remove('visible');
+  document.getElementById('errorMsg').classList.remove('visible');
+  document.getElementById('matchExplanation').style.display = 'none';
+}
+
+// =========================================================
+// EXPORT
+// =========================================================
+function exportJSON() {
+  if (!lastResult) { alert('Run analysis first.'); return; }
+  const data = {
+    timestamp: new Date().toISOString(),
+    similarity: Math.round(lastResult.result.score * 100) + '%',
+    score: lastResult.result.score,
+    common_nodes: lastResult.result.common,
+    edit_distance: lastResult.result.editDist,
+    tree_size_A: lastResult.result.sizeA,
+    tree_size_B: lastResult.result.sizeB,
+    tokens_A: lastResult.tokA.length,
+    tokens_B: lastResult.tokB.length,
+    treeA_string: treeToString(lastResult.treeA),
+    treeB_string: treeToString(lastResult.treeB),
+    dfa_A: lastResult.dfaA ? { accepted: lastResult.dfaA.accepted, finalState: lastResult.dfaA.finalState } : null,
+    dfa_B: lastResult.dfaB ? { accepted: lastResult.dfaB.accepted, finalState: lastResult.dfaB.finalState } : null,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'plagiarism_results.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPDF() {
+  window.print();
+}
+
+// =========================================================
+// TABS & UTILS
+// =========================================================
+function switchTab(name) {
+  const names = ['ast','tokens','grammar','trace','tree','dfa','ambiguity'];
+  document.querySelectorAll('.tab').forEach((t,i) => { t.classList.toggle('active', names[i] === name); });
+  document.querySelectorAll('.tab-content').forEach(c => { c.classList.toggle('active', c.id === 'tab-'+name); });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// DFA toggle handler
+document.getElementById('dfaToggle').addEventListener('change', function() {
+  document.getElementById('dfaStatus').textContent = this.checked
+    ? 'Enabled — tokens validated before parsing'
+    : 'Disabled — skipping DFA validation';
+  document.getElementById('dfaStatus').className = 'dfa-status';
+});
+
+// Print styles
+const printStyle = document.createElement('style');
+printStyle.textContent = `@media print { .controls-bar, .multi-toolbar, .dfa-banner, .editors-container, .theory-strip { display:none!important; } body { background:#fff!important; color:#000!important; } }`;
+document.head.appendChild(printStyle);
+</script>
+</body>
+</html>

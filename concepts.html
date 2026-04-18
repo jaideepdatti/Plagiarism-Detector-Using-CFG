@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Concepts Used — CFG Plagiarism Detector</title>
+  <link rel="stylesheet" href="cfg_plagiarism_detector.css">
+  <style>
+    .concept-card {
+      background: var(--card-gradient);
+      border: 1px solid var(--border-light);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: 32px 40px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.4s cubic-bezier(.25, .46, .45, .94);
+      animation: elegantReveal 0.8s ease-out backwards;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .concept-card:nth-child(1) {
+      animation-delay: 0.15s;
+    }
+
+    .concept-card:nth-child(2) {
+      animation-delay: 0.3s;
+    }
+
+    .concept-card:nth-child(3) {
+      animation-delay: 0.45s;
+    }
+
+    .concept-card:nth-child(4) {
+      animation-delay: 0.6s;
+    }
+
+    .concept-card:nth-child(5) {
+      animation-delay: 0.75s;
+    }
+
+    .concept-card:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--border-gold);
+      transform: translateY(-3px);
+    }
+
+    .concept-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, rgba(184, 150, 46, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .concept-title {
+      font-family: var(--font-heading);
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--accent-dark);
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 14px;
+      position: relative;
+    }
+
+    .concept-title::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 60px;
+      height: 2px;
+      background: var(--gold-gradient);
+    }
+
+    .concept-body {
+      color: var(--text-mid);
+      line-height: 1.8;
+      font-size: 17px;
+      font-family: var(--font-ui);
+    }
+
+    .concept-body code {
+      font-family: var(--font-code);
+      background: rgba(184, 150, 46, 0.06);
+      padding: 3px 8px;
+      border-radius: 5px;
+      color: var(--accent2);
+      font-size: 14px;
+      border: 1px solid rgba(184, 150, 46, 0.15);
+    }
+
+    .concept-body strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .concept-list {
+      margin-top: 14px;
+      margin-left: 20px;
+    }
+
+    .concept-list li {
+      margin-bottom: 8px;
+      padding-left: 8px;
+    }
+
+    .concept-list li::marker {
+      color: var(--accent);
+      content: "✦  ";
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body class="letter-colors">
+  <div class="container">
+
+    <!-- HEADER -->
+    <header>
+      <div class="logo-area">
+        <div class="logo-label">Theory of Computation · CFG Analysis v2</div>
+        <h1>Underlying Concepts</h1>
+        <div class="subtitle">A detailed breakdown of the theoretical foundations used in this detector</div>
+      </div>
+      <div class="badge-row">
+        <button class="btn-secondary" onclick="window.location.href='index.html'"
+          style="border-color:var(--accent);color:var(--accent-dark); font-size: 13px; cursor: pointer;">← Back to
+          Detector</button>
+      </div>
+    </header>
+
+    <div class="concept-card">
+      <div class="concept-title">1. Context-Free Grammar (CFG)</div>
+      <div class="concept-body">
+        A <strong>Context-Free Grammar</strong> is a set of recursive rewriting rules (or productions) used to specify
+        patterns of strings. It is a Chomsy Type-2 grammar. In this application, a custom grammar defines the syntax of
+        our supported hypothetical language, covering constructs like variable assignments, loops, and conditions.
+        <br><br>
+        The CFG acts as the absolute source of truth — providing the structure that validates whether code segments are
+        syntactically valid before any plagiarism comparison occurs.
+      </div>
+    </div>
+
+    <div class="concept-card">
+      <div class="concept-title">2. Lexical Analysis & DFA Token Validation</div>
+      <div class="concept-body">
+        Before applying the grammar, the code first undergoes <strong>lexical analysis</strong>, breaking the raw text
+        into distinct structural tokens (such as <code>KEYWORD</code>, <code>IDENTIFIER</code>, <code>NUMBER</code>,
+        <code>OPERATOR</code>).
+        <br><br>
+        We utilize a 5-state <strong>Deterministic Finite Automaton (DFA)</strong> that validates token sequences during
+        this process. The automaton transitions through states like starting state → ID/Keyword → Operator → ID/Number,
+        validating the token combinations to prevent illegal or malformed syntax strings from overcomplicating the
+        parser.
+      </div>
+    </div>
+
+    <div class="concept-card">
+      <div class="concept-title">3. Top-Down Recursive Descent Parsing (PDA)</div>
+      <div class="concept-body">
+        The parser translates the validated token stream into an Abstract Syntax Tree (AST). We built an <strong>LL(1)
+          Recursive Descent Parser</strong>, which is a software implementation equivalent to a <strong>Pushdown
+          Automaton (PDA)</strong>.
+        <br><br>
+        Operating strictly from top to bottom and left to right, this parser peeks at exactly one token ahead (LL(1)) to
+        decide which CFG production rule to execute. It successfully reconstructs the full semantic parent-child
+        structural representation of the original code snippet.
+      </div>
+    </div>
+
+    <div class="concept-card">
+      <div class="concept-title">4. Tree Edit Distance & Longest Common Subsequence</div>
+      <div class="concept-body">
+        We overcome superficial variable renaming (the most common plagiarism tactic) by comparing the ASTs directly
+        instead of the raw text strings.
+        <br><br>
+        The ASTs are traversed and flattened into arrays, and we employ the <strong>Longest Common Subsequence
+          (LCS)</strong> algorithm (similar to Zhang-Shasha approaches). This calculates the <strong>Tree Edit
+          Distance</strong> — the minimum number of geometric operations (insertions or deletions) strictly required to
+        transform one internal code structure into another.
+      </div>
+    </div>
+
+    <div class="concept-card">
+      <div class="concept-title">5. Multi-Component Weighted Scoring</div>
+      <div class="concept-body">
+        To deliver an accurate verdict that correctly identifies structural plagiarism while capping false positives, we
+        utilize a tri-part weighted formula:
+        <ul class="concept-list">
+          <li><strong>Structural Similarity (70%)</strong>: Matches the abstract syntax structure via the calculated
+            tree edit distance. Identifies structurally isomorphic algorithms.</li>
+          <li><strong>Token Flow Similarity (20%)</strong>: Matches the raw sequential logic progression of normalized
+            tokens.</li>
+          <li><strong>Identifier Equality (10%)</strong>: Deducts points if variable names or constants are changed.
+          </li>
+        </ul>
+        <br>
+        The structural similarity alone can only achieve 97%. The code strictly demands character-for-character
+        equivalence across original source code to reach a 100% <em>Exact Match</em> verdict.
+      </div>
+    </div>
+
+  </div><!-- end container -->
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-label">Crafted with precision</div>
+    <div class="footer-name">Made by Jaideep Datti</div>
+    <div class="footer-links">
+      <a class="footer-link" href="mailto:jaideep.d24@iiits.in" title="Send email">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
+        </svg>
+        jaideep.d24@iiits.in
+      </a>
+      <a class="footer-link" href="https://www.linkedin.com/in/jaideep-datti/" target="_blank" rel="noopener noreferrer"
+        title="LinkedIn Profile">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
+        </svg>
+        LinkedIn
+      </a>
+    </div>
+    <div class="footer-ornament">— ❧ —</div>
+    <div class="footer-year">© 2026 · Theory of Computation</div>
+  </footer>
+
+</body>
+
+</html>
